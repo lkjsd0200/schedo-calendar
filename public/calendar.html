@@ -24,8 +24,10 @@
       <div class="view-toggle">
         <button class="view-btn active" data-view="month" title="월간 보기 (M)">월</button>
         <button class="view-btn" data-view="week" title="주간 보기 (W)">주</button>
+        <button class="view-btn" data-view="category" title="카테고리 보기 (C)">카테고리</button>
       </div>
       <button class="btn-add-event" id="btn-add-event" title="일정 추가 (N)">+ 일정 추가</button>
+      <button class="btn-checklist" id="btn-checklist" title="체크리스트 (L)">☑ 체크리스트</button>
       <button class="btn-share" id="btn-share" title="공유">공유</button>
     </div>
   </header>
@@ -60,7 +62,25 @@
           <div class="week-grid" id="week-grid"></div>
         </div>
       </div>
+
+      <!-- 카테고리 뷰 -->
+      <div id="category-view" class="view-container hidden">
+        <div class="category-grid" id="category-grid"></div>
+      </div>
     </main>
+
+    <!-- 체크리스트 패널 -->
+    <aside class="checklist-panel" id="checklist-panel">
+      <div class="checklist-header">
+        <h3>☑ 체크리스트</h3>
+        <button class="checklist-close" id="checklist-close">✕</button>
+      </div>
+      <ul class="checklist-items" id="checklist-items"></ul>
+      <div class="checklist-input-row">
+        <input type="text" id="checklist-input" placeholder="새 항목 추가..." maxlength="60">
+        <button class="btn-checklist-add" id="btn-checklist-add">추가</button>
+      </div>
+    </aside>
   </div>
 
   <!-- 이벤트 모달 -->
@@ -163,7 +183,6 @@
   </div>
 
   <div class="toast hidden" id="toast"></div>
-
   <script src="/js/calendar.js"></script>
 </body>
 </html>

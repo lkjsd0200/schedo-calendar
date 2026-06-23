@@ -17,6 +17,7 @@ const { roomId, roomName } = session;
 let me = session.participant;
 let events = session.events || [];
 let participants = session.participants || [];
+let checklists = session.checklists || [];
 let currentView = 'month';
 let currentDate = new Date();
 let editingEventId = null;
@@ -31,9 +32,10 @@ document.getElementById('my-color-badge').style.background = me.color;
 document.getElementById('share-code-display').textContent = roomId;
 renderParticipants();
 renderCalendar();
+renderChecklist();
 startPolling();
 
-// ===== POLLING (실시간 동기화) =====
+// ===== POLLING =====
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
@@ -43,11 +45,16 @@ function startPolling() {
       const data = await res.json();
       const evChanged = JSON.stringify(data.events) !== JSON.stringify(events);
       const pChanged = JSON.stringify(data.participants) !== JSON.stringify(participants);
+      const clChanged = JSON.stringify(data.checklists) !== JSON.stringify(checklists);
       if (evChanged || pChanged) {
         events = data.events || [];
         participants = data.participants || [];
         renderCalendar();
         renderParticipants();
+      }
+      if (clChanged) {
+        checklists = data.checklists || [];
+        renderChecklist();
       }
     } catch {}
   }, 5000);
@@ -71,6 +78,7 @@ document.querySelectorAll('.view-btn').forEach(btn => {
     currentView = btn.dataset.view;
     document.getElementById('month-view').classList.toggle('hidden', currentView !== 'month');
     document.getElementById('week-view').classList.toggle('hidden', currentView !== 'week');
+    document.getElementById('category-view').classList.toggle('hidden', currentView !== 'category');
     renderCalendar();
   });
 });
@@ -79,7 +87,7 @@ document.querySelectorAll('.view-btn').forEach(btn => {
 function navigateDate(dir) {
   if (currentView === 'month') {
     currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + dir, 1);
-  } else {
+  } else if (currentView === 'week') {
     currentDate = new Date(currentDate.getTime() + dir * 7 * 86400000);
   }
   renderCalendar();
@@ -88,7 +96,8 @@ function navigateDate(dir) {
 // ===== RENDER =====
 function renderCalendar() {
   if (currentView === 'month') renderMonth();
-  else renderWeek();
+  else if (currentView === 'week') renderWeek();
+  else if (currentView === 'category') renderCategory();
 }
 
 // ===== MONTH VIEW =====
@@ -228,6 +237,62 @@ function renderWeek() {
   });
 }
 
+// ===== CATEGORY VIEW =====
+function renderCategory() {
+  document.getElementById('cal-title').textContent = '카테고리별 일정';
+  const grid = document.getElementById('category-grid');
+  grid.innerHTML = '';
+
+  const visibleEvents = events.filter(e => !hiddenParticipants.has(e.participant_id));
+
+  Object.entries(CATEGORIES).forEach(([key, cat]) => {
+    const catEvents = visibleEvents.filter(e => (e.category || 'default') === key);
+
+    const card = document.createElement('div');
+    card.className = 'cat-card';
+
+    const header = document.createElement('div');
+    header.className = 'cat-card-header';
+    const catColor = cat.color || '#4A90D9';
+    header.style.borderLeftColor = catColor;
+    header.innerHTML = `
+      <span class="cat-card-icon">${cat.icon}</span>
+      <span class="cat-card-label">${cat.label}</span>
+      <span class="cat-card-count" style="background:${catColor}">${catEvents.length}</span>
+    `;
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'cat-card-body';
+
+    if (catEvents.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'cat-card-empty';
+      empty.textContent = '일정 없음';
+      body.appendChild(empty);
+    } else {
+      const sorted = [...catEvents].sort((a, b) => a.date.localeCompare(b.date));
+      sorted.forEach(ev => {
+        const p = participants.find(p => p.id === ev.participant_id);
+        const row = document.createElement('div');
+        row.className = 'cat-event-row';
+        row.innerHTML = `
+          <span class="cat-ev-dot" style="background:${p ? p.color : '#888'}"></span>
+          <div class="cat-ev-info">
+            <div class="cat-ev-title">${ev.title}</div>
+            <div class="cat-ev-meta">${ev.date}${ev.end_date && ev.end_date !== ev.date ? ' ~ ' + ev.end_date : ''} · ${p ? p.name : '?'}</div>
+          </div>
+        `;
+        row.addEventListener('click', e => { showEventPopup(ev, e); });
+        body.appendChild(row);
+      });
+    }
+
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+}
+
 // ===== PARTICIPANTS =====
 function renderParticipants() {
   const list = document.getElementById('participants-list');
@@ -245,6 +310,103 @@ function renderParticipants() {
   });
 }
 
+// ===== CHECKLIST =====
+const checklistPanel = document.getElementById('checklist-panel');
+const checklistInput = document.getElementById('checklist-input');
+
+document.getElementById('btn-checklist').addEventListener('click', () => {
+  checklistPanel.classList.toggle('open');
+  if (checklistPanel.classList.contains('open')) checklistInput.focus();
+});
+document.getElementById('checklist-close').addEventListener('click', () => {
+  checklistPanel.classList.remove('open');
+});
+
+document.getElementById('btn-checklist-add').addEventListener('click', addChecklistItem);
+checklistInput.addEventListener('keydown', e => { if (e.key === 'Enter') addChecklistItem(); });
+
+async function addChecklistItem() {
+  const title = checklistInput.value.trim();
+  if (!title) return;
+  checklistInput.value = '';
+  try {
+    const res = await fetch(`/api/rooms/${roomId}/checklists`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantId: me.id, title })
+    });
+    if (!res.ok) { showToast('추가 실패'); return; }
+    const item = await res.json();
+    checklists.push(item);
+    renderChecklist();
+  } catch { showToast('서버 오류가 발생했습니다.'); }
+}
+
+async function toggleChecklistItem(itemId) {
+  try {
+    const res = await fetch(`/api/rooms/${roomId}/checklists/${itemId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+    });
+    if (!res.ok) return;
+    const updated = await res.json();
+    checklists = checklists.map(c => c.id === itemId ? updated : c);
+    renderChecklist();
+  } catch {}
+}
+
+async function deleteChecklistItem(itemId) {
+  try {
+    const res = await fetch(`/api/rooms/${roomId}/checklists/${itemId}`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantId: me.id })
+    });
+    if (!res.ok) { showToast('삭제 권한이 없습니다.'); return; }
+    checklists = checklists.filter(c => c.id !== itemId);
+    renderChecklist();
+  } catch {}
+}
+
+function renderChecklist() {
+  const ul = document.getElementById('checklist-items');
+  ul.innerHTML = '';
+  if (checklists.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'checklist-empty';
+    li.textContent = '항목이 없습니다.';
+    ul.appendChild(li);
+    return;
+  }
+  checklists.forEach(item => {
+    const li = document.createElement('li');
+    li.className = 'checklist-item' + (item.checked ? ' checked' : '');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!item.checked;
+    cb.addEventListener('change', () => toggleChecklistItem(item.id));
+
+    const p = participants.find(p => p.id === item.participant_id);
+    const label = document.createElement('span');
+    label.className = 'checklist-label';
+    label.textContent = item.title;
+
+    const meta = document.createElement('span');
+    meta.className = 'checklist-meta';
+    meta.textContent = p ? p.name : '';
+
+    const del = document.createElement('button');
+    del.className = 'checklist-del';
+    del.textContent = '✕';
+    del.title = '삭제';
+    del.addEventListener('click', () => deleteChecklistItem(item.id));
+
+    li.appendChild(cb);
+    li.appendChild(label);
+    li.appendChild(meta);
+    li.appendChild(del);
+    ul.appendChild(li);
+  });
+}
+
 // ===== EVENT MODAL =====
 const modal = document.getElementById('event-modal');
 const evTitle = document.getElementById('ev-title');
@@ -258,7 +420,6 @@ const timeRow = document.getElementById('time-row');
 const btnSave = document.getElementById('btn-save-event');
 const btnDelete = document.getElementById('btn-delete-event');
 
-// 카테고리 선택
 document.querySelectorAll('.cat-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
@@ -380,7 +541,6 @@ function showEventPopup(ev, mouseEvent) {
     timeEl.classList.remove('hidden');
   } else { timeEl.classList.add('hidden'); }
 
-  // 카테고리 배지
   let catEl = document.getElementById('popup-category');
   if (!catEl) {
     catEl = document.createElement('p');
@@ -434,7 +594,7 @@ function showEventPopup(ev, mouseEvent) {
 function closePopup() { popup.classList.add('hidden'); }
 document.getElementById('popup-close').addEventListener('click', closePopup);
 document.addEventListener('click', e => {
-  if (!e.target.closest('#event-popup') && !e.target.closest('.event-chip') && !e.target.closest('.week-event')) closePopup();
+  if (!e.target.closest('#event-popup') && !e.target.closest('.event-chip') && !e.target.closest('.week-event') && !e.target.closest('.cat-event-row')) closePopup();
 });
 
 // ===== KEYBOARD SHORTCUTS =====
@@ -458,11 +618,11 @@ document.addEventListener('keydown', e => {
     case 'ArrowLeft': navigateDate(-1); break;
     case 'ArrowRight': navigateDate(1); break;
     case 't': case 'T': currentDate = new Date(); renderCalendar(); break;
-    case 'm': case 'M':
-      document.querySelector('[data-view="month"]').click(); break;
-    case 'w': case 'W':
-      document.querySelector('[data-view="week"]').click(); break;
-    case 'Escape': closePopup(); break;
+    case 'm': case 'M': document.querySelector('[data-view="month"]').click(); break;
+    case 'w': case 'W': document.querySelector('[data-view="week"]').click(); break;
+    case 'c': case 'C': document.querySelector('[data-view="category"]').click(); break;
+    case 'l': case 'L': document.getElementById('btn-checklist').click(); break;
+    case 'Escape': closePopup(); checklistPanel.classList.remove('open'); break;
   }
 });
 

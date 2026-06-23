@@ -284,6 +284,85 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .cat-btn[data-cat="field"].active    { background: #10B981; }
 .cat-btn[data-cat="dept"].active     { background: #8B5CF6; }
 
+/* ===== CHECKLIST BUTTON ===== */
+.btn-checklist {
+  padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; color: var(--text-muted); transition: all .15s;
+}
+.btn-checklist:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ===== CHECKLIST PANEL ===== */
+.checklist-panel {
+  width: 0; overflow: hidden; background: var(--surface); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+  transition: width .25s ease; position: relative;
+}
+.checklist-panel.open { width: 280px; }
+.checklist-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.checklist-header h3 { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.checklist-close { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--text-muted); }
+.checklist-close:hover { background: var(--bg); }
+
+.checklist-items { list-style: none; flex: 1; overflow-y: auto; padding: 8px 0; }
+.checklist-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  transition: background .1s; min-width: 0;
+}
+.checklist-item:hover { background: var(--bg); }
+.checklist-item input[type="checkbox"] { flex-shrink: 0; width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); }
+.checklist-label { flex: 1; font-size: 13px; color: var(--text); word-break: break-word; min-width: 0; white-space: normal; }
+.checklist-item.checked .checklist-label { text-decoration: line-through; color: var(--text-muted); }
+.checklist-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.checklist-del { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+.checklist-del:hover { background: #fff0f0; color: var(--danger); }
+.checklist-empty { padding: 20px 14px; color: var(--text-muted); font-size: 13px; text-align: center; }
+.checklist-input-row { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.checklist-input-row input {
+  flex: 1; padding: 7px 10px; border: 1.5px solid var(--border); border-radius: 7px;
+  font-size: 13px; outline: none; min-width: 0;
+}
+.checklist-input-row input:focus { border-color: var(--primary); }
+.btn-checklist-add {
+  padding: 7px 12px; background: var(--primary); color: #fff; border-radius: 7px;
+  font-size: 13px; font-weight: 600; flex-shrink: 0; transition: background .15s;
+}
+.btn-checklist-add:hover { background: var(--primary-dark); }
+
+/* ===== CATEGORY VIEW ===== */
+.category-grid {
+  flex: 1; display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px; padding: 16px; overflow-y: auto; align-content: start;
+}
+.cat-card {
+  background: var(--surface); border-radius: 10px; border: 1px solid var(--border);
+  box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;
+}
+.cat-card-header {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-left: 4px solid #888; background: #fafafa; flex-shrink: 0;
+}
+.cat-card-icon { font-size: 18px; }
+.cat-card-label { font-size: 13px; font-weight: 600; flex: 1; }
+.cat-card-count {
+  font-size: 11px; font-weight: 700; color: #fff; background: #888;
+  border-radius: 10px; padding: 2px 8px; min-width: 22px; text-align: center;
+}
+.cat-card-body { padding: 6px 0; overflow-y: auto; max-height: 220px; }
+.cat-event-row {
+  display: flex; align-items: flex-start; gap: 8px; padding: 7px 14px;
+  cursor: pointer; transition: background .1s;
+}
+.cat-event-row:hover { background: var(--bg); }
+.cat-ev-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.cat-ev-info { flex: 1; min-width: 0; }
+.cat-ev-title { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-ev-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.cat-card-empty { padding: 14px; text-align: center; font-size: 12px; color: var(--text-muted); }
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

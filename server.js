@@ -21,7 +21,7 @@ function loadDB() {
     const raw = fs.readFileSync(DB_FILE, 'utf8').replace(/^﻿/, ''); // BOM 제거
     return JSON.parse(raw);
   } catch {
-    return { rooms: {}, participants: {}, events: {} };
+    return { rooms: {}, participants: {}, events: {}, checklists: {} };
   }
 }
 
@@ -74,7 +74,8 @@ app.post('/api/rooms/:id/join', (req, res) => {
 
     const events = Object.values(db.events).filter(e => e.room_id === room.id);
     const participants = Object.values(db.participants).filter(p => p.room_id === room.id);
-    res.json({ room: { id: room.id, name: room.name }, participant, events, participants });
+    const checklists = Object.values(db.checklists || {}).filter(c => c.room_id === room.id).sort((a, b) => a.created_at - b.created_at);
+    res.json({ room: { id: room.id, name: room.name }, participant, events, participants, checklists });
   } catch (err) {
     console.error('방 입장 오류:', err.message);
     res.status(500).json({ error: '서버 오류: ' + err.message });
@@ -92,7 +93,8 @@ app.get('/api/rooms/:id/sync', (req, res) => {
   if (!room) return res.status(404).json({ error: '방 없음' });
   const events = Object.values(db.events).filter(e => e.room_id === room.id);
   const participants = Object.values(db.participants).filter(p => p.room_id === room.id);
-  res.json({ events, participants });
+  const checklists = Object.values(db.checklists || {}).filter(c => c.room_id === room.id).sort((a, b) => a.created_at - b.created_at);
+  res.json({ events, participants, checklists });
 });
 
 // 이벤트 추가
@@ -147,6 +149,56 @@ app.delete('/api/rooms/:roomId/events/:eventId', (req, res) => {
   } catch (err) {
     console.error('이벤트 삭제 오류:', err.message);
     res.status(500).json({ error: '서버 오류: ' + err.message });
+  }
+});
+
+// 체크리스트 추가
+app.post('/api/rooms/:id/checklists', (req, res) => {
+  try {
+    const { participantId, title } = req.body;
+    const room = db.rooms[req.params.id];
+    if (!room) return res.status(404).json({ error: '방 없음' });
+    const participant = db.participants[participantId];
+    if (!participant || participant.room_id !== room.id) return res.status(403).json({ error: '참여자 없음' });
+
+    if (!db.checklists) db.checklists = {};
+    const id = uuidv4();
+    const item = { id, room_id: room.id, participant_id: participantId, title, checked: 0, created_at: Date.now() };
+    db.checklists[id] = item;
+    saveDB(db);
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 체크리스트 토글
+app.put('/api/rooms/:roomId/checklists/:itemId', (req, res) => {
+  try {
+    if (!db.checklists) db.checklists = {};
+    const item = db.checklists[req.params.itemId];
+    if (!item || item.room_id !== req.params.roomId) return res.status(404).json({ error: '항목 없음' });
+    item.checked = item.checked ? 0 : 1;
+    saveDB(db);
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 체크리스트 삭제
+app.delete('/api/rooms/:roomId/checklists/:itemId', (req, res) => {
+  try {
+    if (!db.checklists) db.checklists = {};
+    const { participantId } = req.body;
+    const item = db.checklists[req.params.itemId];
+    if (!item || item.room_id !== req.params.roomId) return res.status(404).json({ error: '항목 없음' });
+    if (item.participant_id !== participantId) return res.status(403).json({ error: '삭제 권한 없음' });
+    delete db.checklists[req.params.itemId];
+    saveDB(db);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

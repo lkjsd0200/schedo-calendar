@@ -2,8 +2,7 @@
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    status, headers: { 'Content-Type': 'application/json; charset=utf-8' }
   });
 }
 
@@ -36,7 +35,7 @@ function randomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-// ===== API HANDLERS =====
+// ===== ROOMS =====
 
 async function createRoom(request, env) {
   const { name, password } = await request.json();
@@ -63,14 +62,18 @@ async function joinRoom(request, env, roomId) {
 
   const { results: events } = await env.DB.prepare('SELECT * FROM events WHERE room_id = ?').bind(roomId).all();
   const { results: participants } = await env.DB.prepare('SELECT * FROM participants WHERE room_id = ?').bind(roomId).all();
-  return json({ room: { id: room.id, name: room.name }, participant, events, participants });
+  const { results: checklists } = await env.DB.prepare('SELECT * FROM checklists WHERE room_id = ? ORDER BY created_at ASC').bind(roomId).all();
+  return json({ room: { id: room.id, name: room.name }, participant, events, participants, checklists });
 }
 
 async function syncRoom(env, roomId) {
   const { results: events } = await env.DB.prepare('SELECT * FROM events WHERE room_id = ?').bind(roomId).all();
   const { results: participants } = await env.DB.prepare('SELECT * FROM participants WHERE room_id = ?').bind(roomId).all();
-  return json({ events, participants });
+  const { results: checklists } = await env.DB.prepare('SELECT * FROM checklists WHERE room_id = ? ORDER BY created_at ASC').bind(roomId).all();
+  return json({ events, participants, checklists });
 }
+
+// ===== EVENTS =====
 
 async function addEvent(request, env, roomId) {
   const { participantId, title, category, date, endDate, startTime, endTime, memo, allDay } = await request.json();
@@ -85,8 +88,7 @@ async function addEvent(request, env, roomId) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, roomId, participantId, title, category || 'default', date, endDate || null, startTime || null, endTime || null, memo || '', allDay ? 1 : 0).run();
 
-  const event = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first();
-  return json(event);
+  return json(await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first());
 }
 
 async function updateEvent(request, env, roomId, eventId) {
@@ -99,8 +101,7 @@ async function updateEvent(request, env, roomId, eventId) {
     `UPDATE events SET title=?, category=?, date=?, end_date=?, start_time=?, end_time=?, memo=?, all_day=?, updated_at=unixepoch() WHERE id=?`
   ).bind(title, category || 'default', date, endDate || null, startTime || null, endTime || null, memo || '', allDay ? 1 : 0, eventId).run();
 
-  const updated = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first();
-  return json(updated);
+  return json(await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first());
 }
 
 async function deleteEvent(request, env, roomId, eventId) {
@@ -109,6 +110,36 @@ async function deleteEvent(request, env, roomId, eventId) {
   if (!event) return json({ error: '이벤트 없음' }, 404);
   if (event.participant_id !== participantId) return json({ error: '삭제 권한 없음' }, 403);
   await env.DB.prepare('DELETE FROM events WHERE id = ?').bind(eventId).run();
+  return json({ ok: true });
+}
+
+// ===== CHECKLISTS =====
+
+async function addChecklist(request, env, roomId) {
+  const { participantId, title } = await request.json();
+  const room = await env.DB.prepare('SELECT id FROM rooms WHERE id = ?').bind(roomId).first();
+  if (!room) return json({ error: '방 없음' }, 404);
+  const participant = await env.DB.prepare('SELECT id FROM participants WHERE id = ? AND room_id = ?').bind(participantId, roomId).first();
+  if (!participant) return json({ error: '참여자 없음' }, 403);
+
+  const id = crypto.randomUUID();
+  await env.DB.prepare('INSERT INTO checklists (id, room_id, participant_id, title) VALUES (?, ?, ?, ?)').bind(id, roomId, participantId, title).run();
+  return json(await env.DB.prepare('SELECT * FROM checklists WHERE id = ?').bind(id).first());
+}
+
+async function toggleChecklist(request, env, roomId, itemId) {
+  const item = await env.DB.prepare('SELECT * FROM checklists WHERE id = ? AND room_id = ?').bind(itemId, roomId).first();
+  if (!item) return json({ error: '항목 없음' }, 404);
+  await env.DB.prepare('UPDATE checklists SET checked = ? WHERE id = ?').bind(item.checked ? 0 : 1, itemId).run();
+  return json(await env.DB.prepare('SELECT * FROM checklists WHERE id = ?').bind(itemId).first());
+}
+
+async function deleteChecklist(request, env, roomId, itemId) {
+  const { participantId } = await request.json();
+  const item = await env.DB.prepare('SELECT * FROM checklists WHERE id = ? AND room_id = ?').bind(itemId, roomId).first();
+  if (!item) return json({ error: '항목 없음' }, 404);
+  if (item.participant_id !== participantId) return json({ error: '삭제 권한 없음' }, 403);
+  await env.DB.prepare('DELETE FROM checklists WHERE id = ?').bind(itemId).run();
   return json({ ok: true });
 }
 
@@ -123,7 +154,6 @@ function getConfig(env) {
 async function handleAPI(request, env, url) {
   const method = request.method;
   const parts = url.pathname.replace(/^\/api\//, '').split('/').filter(Boolean);
-  // parts: ['rooms'], ['rooms', id, 'join'], ['rooms', id, 'sync'], ['rooms', id, 'events'], ['rooms', id, 'events', eventId]
 
   try {
     if (parts[0] === 'config' && method === 'GET') return getConfig(env);
@@ -147,6 +177,15 @@ async function handleAPI(request, env, url) {
           if (method === 'DELETE') return deleteEvent(request, env, roomId, parts[3]);
         }
       }
+
+      if (action === 'checklists') {
+        if (!parts[3]) {
+          if (method === 'POST') return addChecklist(request, env, roomId);
+        } else {
+          if (method === 'PUT') return toggleChecklist(request, env, roomId, parts[3]);
+          if (method === 'DELETE') return deleteChecklist(request, env, roomId, parts[3]);
+        }
+      }
     }
 
     return json({ error: '잘못된 요청' }, 404);
@@ -161,9 +200,7 @@ async function handleAPI(request, env, url) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/')) {
-      return handleAPI(request, env, url);
-    }
+    if (url.pathname.startsWith('/api/')) return handleAPI(request, env, url);
     return env.ASSETS.fetch(request);
   }
 };
