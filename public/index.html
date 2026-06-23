@@ -14,6 +14,15 @@
       <p class="tagline">함께 보는 일정, 함께 만드는 시간</p>
     </div>
 
+    <!-- 내 캘린더 목록 -->
+    <div id="my-rooms-section" class="hidden">
+      <div class="my-rooms-header">
+        <h3>내 캘린더</h3>
+        <span class="my-rooms-hint">클릭하면 바로 입장됩니다</span>
+      </div>
+      <div id="my-rooms-list"></div>
+    </div>
+
     <div class="card-tabs">
       <button class="tab-btn active" data-tab="join">방 입장</button>
       <button class="tab-btn" data-tab="create">방 만들기</button>
@@ -23,13 +32,11 @@
     <div class="card" id="tab-join">
       <h2>캘린더 입장</h2>
 
-      <!-- 구글 로그인 (클라이언트 ID 설정 시 표시) -->
       <div id="google-login-section" class="hidden">
         <div id="google-btn-container"></div>
         <div class="or-divider"><span>또는 직접 입력</span></div>
       </div>
 
-      <!-- 구글 로그인 상태 표시 -->
       <div id="google-user-card" class="hidden google-user-card">
         <img id="google-user-avatar" src="" alt="" class="google-avatar">
         <div class="google-user-info">
@@ -47,7 +54,7 @@
         <label>비밀번호</label>
         <input type="password" id="join-password" placeholder="비밀번호 입력">
       </div>
-      <div class="form-group" id="name-group">
+      <div class="form-group">
         <label>내 이름</label>
         <input type="text" id="join-name" placeholder="참여자 이름" maxlength="20">
       </div>
