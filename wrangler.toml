@@ -1,0 +1,15 @@
+name = "schedo-calendar"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[vars]
+GOOGLE_CLIENT_ID = ""  # Google Cloud Console에서 발급받은 클라이언트 ID 입력
+
+[[d1_databases]]
+binding = "DB"
+database_name = "schedo-calendar-db"
+database_id = "cf9b5ccb-aecb-41ae-a001-b9e36b91302f"

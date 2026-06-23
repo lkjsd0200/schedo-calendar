@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedo Calendar</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="calendar-page">
+
+  <!-- 헤더 -->
+  <header class="cal-header">
+    <div class="cal-header-left">
+      <span class="logo-sm">📅 Schedo</span>
+      <span class="room-name" id="room-name-display"></span>
+    </div>
+    <div class="cal-nav">
+      <button class="nav-btn" id="btn-prev" title="이전 (← 화살표)">&#8249;</button>
+      <h2 class="cal-title" id="cal-title"></h2>
+      <button class="nav-btn" id="btn-next" title="다음 (→ 화살표)">&#8250;</button>
+      <button class="btn-today" id="btn-today" title="오늘 (T)">오늘</button>
+    </div>
+    <div class="cal-header-right">
+      <div class="view-toggle">
+        <button class="view-btn active" data-view="month" title="월간 보기 (M)">월</button>
+        <button class="view-btn" data-view="week" title="주간 보기 (W)">주</button>
+      </div>
+      <button class="btn-add-event" id="btn-add-event" title="일정 추가 (N)">+ 일정 추가</button>
+      <button class="btn-share" id="btn-share" title="공유">공유</button>
+    </div>
+  </header>
+
+  <div class="cal-body">
+    <!-- 참여자 패널 -->
+    <aside class="participants-panel">
+      <h3>참여자</h3>
+      <ul id="participants-list"></ul>
+      <div class="my-info">
+        <span class="my-badge" id="my-color-badge"></span>
+        <span id="my-name-display"></span>
+        <span class="my-label">(나)</span>
+      </div>
+    </aside>
+
+    <!-- 캘린더 영역 -->
+    <main class="cal-main">
+      <!-- 월간 뷰 -->
+      <div id="month-view" class="view-container">
+        <div class="weekday-header">
+          <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+        </div>
+        <div class="month-grid" id="month-grid"></div>
+      </div>
+
+      <!-- 주간 뷰 -->
+      <div id="week-view" class="view-container hidden">
+        <div class="week-header" id="week-header"></div>
+        <div class="week-body">
+          <div class="time-col" id="time-col"></div>
+          <div class="week-grid" id="week-grid"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 이벤트 모달 -->
+  <div class="modal-overlay hidden" id="event-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title-label">일정 추가</h3>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>제목 <span class="required">*</span></label>
+          <input type="text" id="ev-title" placeholder="일정 제목" maxlength="50" autofocus>
+        </div>
+        <div class="form-group">
+          <label>카테고리</label>
+          <div class="category-selector" id="ev-category">
+            <button class="cat-btn active" data-cat="default" type="button">📋 일반</button>
+            <button class="cat-btn" data-cat="online" type="button">🖥️ 온라인행사</button>
+            <button class="cat-btn" data-cat="annual" type="button">🏖️ 연차</button>
+            <button class="cat-btn" data-cat="half" type="button">☀️ 반차</button>
+            <button class="cat-btn" data-cat="quarter" type="button">☕ 반반차</button>
+            <button class="cat-btn" data-cat="field" type="button">🚗 외근</button>
+            <button class="cat-btn" data-cat="dept" type="button">👥 부서일정</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>날짜</label>
+          <div class="date-row">
+            <input type="date" id="ev-date">
+            <span class="date-sep">~</span>
+            <input type="date" id="ev-end-date">
+          </div>
+        </div>
+        <div class="form-group allday-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="ev-allday" checked>
+            종일
+          </label>
+        </div>
+        <div class="form-group time-row hidden" id="time-row">
+          <label>시간</label>
+          <div class="time-inputs">
+            <input type="time" id="ev-start-time">
+            <span>~</span>
+            <input type="time" id="ev-end-time">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>메모</label>
+          <textarea id="ev-memo" placeholder="메모 (선택)" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-danger hidden" id="btn-delete-event">삭제</button>
+        <div class="modal-footer-right">
+          <button class="btn-secondary" id="btn-cancel-event">취소 (Esc)</button>
+          <button class="btn-primary" id="btn-save-event">저장 (Enter)</button>
+        </div>
+      </div>
+      <div class="shortcut-hint">💡 Enter: 저장 &nbsp;|&nbsp; Esc: 닫기 &nbsp;|&nbsp; Delete: 삭제</div>
+    </div>
+  </div>
+
+  <!-- 공유 모달 -->
+  <div class="modal-overlay hidden" id="share-modal">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>캘린더 공유</h3>
+        <button class="modal-close" id="share-modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>아래 방 코드와 비밀번호를 공유하세요.</p>
+        <div class="share-info">
+          <div class="share-row">
+            <span class="share-label">방 코드</span>
+            <span class="share-value" id="share-code-display"></span>
+            <button class="btn-copy-sm" id="btn-copy-share">복사</button>
+          </div>
+        </div>
+        <p class="share-note">비밀번호는 방 생성 시 설정한 값입니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 이벤트 상세 팝업 -->
+  <div class="event-popup hidden" id="event-popup">
+    <div class="popup-header">
+      <span class="popup-color" id="popup-color"></span>
+      <strong id="popup-title"></strong>
+      <button class="popup-close" id="popup-close">✕</button>
+    </div>
+    <div class="popup-body">
+      <p id="popup-date"></p>
+      <p id="popup-time" class="hidden"></p>
+      <p id="popup-participant"></p>
+      <p id="popup-memo" class="hidden"></p>
+    </div>
+    <div class="popup-footer" id="popup-actions"></div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="/js/calendar.js"></script>
+</body>
+</html>

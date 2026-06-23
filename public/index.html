@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedo Calendar</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="landing-page">
+  <div class="landing-container">
+    <div class="logo">
+      <span class="logo-icon">📅</span>
+      <h1>Schedo Calendar</h1>
+      <p class="tagline">함께 보는 일정, 함께 만드는 시간</p>
+    </div>
+
+    <div class="card-tabs">
+      <button class="tab-btn active" data-tab="join">방 입장</button>
+      <button class="tab-btn" data-tab="create">방 만들기</button>
+    </div>
+
+    <!-- 방 입장 -->
+    <div class="card" id="tab-join">
+      <h2>캘린더 입장</h2>
+
+      <!-- 구글 로그인 (클라이언트 ID 설정 시 표시) -->
+      <div id="google-login-section" class="hidden">
+        <div id="google-btn-container"></div>
+        <div class="or-divider"><span>또는 직접 입력</span></div>
+      </div>
+
+      <!-- 구글 로그인 상태 표시 -->
+      <div id="google-user-card" class="hidden google-user-card">
+        <img id="google-user-avatar" src="" alt="" class="google-avatar">
+        <div class="google-user-info">
+          <strong id="google-user-name"></strong>
+          <span id="google-user-email"></span>
+        </div>
+        <button class="btn-google-logout" id="btn-google-logout" title="로그아웃">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label>방 코드</label>
+        <input type="text" id="join-room-id" placeholder="공유받은 방 코드 입력" maxlength="12">
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="join-password" placeholder="비밀번호 입력">
+      </div>
+      <div class="form-group" id="name-group">
+        <label>내 이름</label>
+        <input type="text" id="join-name" placeholder="참여자 이름" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>내 색상</label>
+        <div class="color-picker-row">
+          <input type="color" id="join-color" value="#4A90D9">
+          <span class="color-hint">캘린더에서 내 일정 색상</span>
+        </div>
+      </div>
+      <button class="btn-primary" id="btn-join">입장하기</button>
+      <p class="error-msg" id="join-error"></p>
+    </div>
+
+    <!-- 방 만들기 -->
+    <div class="card hidden" id="tab-create">
+      <h2>새 캘린더 만들기</h2>
+      <div class="form-group">
+        <label>캘린더 이름</label>
+        <input type="text" id="create-name" placeholder="예: 팀 일정, 가족 캘린더" maxlength="30">
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="create-password" placeholder="참여자들과 공유할 비밀번호">
+      </div>
+      <button class="btn-primary" id="btn-create">만들기</button>
+      <p class="error-msg" id="create-error"></p>
+
+      <div class="share-box hidden" id="share-box">
+        <h3>✅ 방이 생성되었습니다!</h3>
+        <p>아래 방 코드를 참여자에게 공유하세요:</p>
+        <div class="room-code-display">
+          <span id="share-room-id"></span>
+          <button class="btn-copy" id="btn-copy-code">복사</button>
+        </div>
+        <button class="btn-secondary" id="btn-go-join">입장하기</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/js/landing.js"></script>
+</body>
+</html>
