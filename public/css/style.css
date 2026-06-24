@@ -384,6 +384,28 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .cat-ev-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .cat-card-empty { padding: 14px; text-align: center; font-size: 12px; color: var(--text-muted); }
 
+/* ===== GOOGLE CALENDAR ===== */
+.gcal-section { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+.gcal-section-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
+.btn-gcal-connect {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 10px;
+  border: 1.5px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text);
+  background: var(--surface); cursor: pointer; transition: all .15s; font-family: inherit;
+}
+.btn-gcal-connect:hover { border-color: #4285F4; color: #4285F4; }
+.gcal-status-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.gcal-dot { width: 8px; height: 8px; border-radius: 50%; background: #34A853; flex-shrink: 0; }
+.gcal-status-text { font-size: 12px; color: #34A853; font-weight: 600; }
+.gcal-controls { display: flex; flex-direction: column; gap: 4px; }
+.gcal-toggle-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); cursor: pointer; }
+.gcal-toggle-label input[type="checkbox"] { accent-color: #4285F4; width: 14px; height: 14px; }
+.btn-gcal-disconnect { font-size: 11px; color: var(--text-muted); padding: 3px 0; text-align: left; text-decoration: underline; cursor: pointer; background: none; border: none; font-family: inherit; }
+.btn-gcal-disconnect:hover { color: var(--danger); }
+
+.gcal-chip { background: transparent !important; border: 1.5px solid #4285F4; color: #4285F4 !important; font-weight: 500; }
+.gcal-chip:hover { background: #e8f0fe !important; }
+.gcal-week-event { background: transparent !important; border: 1.5px solid #4285F4; color: #4285F4 !important; }
+
 /* ===== SCROLLBAR ===== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

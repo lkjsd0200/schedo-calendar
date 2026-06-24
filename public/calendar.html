@@ -43,6 +43,30 @@
         <span id="my-name-display"></span>
         <span class="my-label">(나)</span>
       </div>
+
+      <!-- Google Calendar 연동 -->
+      <div class="gcal-section">
+        <div class="gcal-section-title">Google Calendar</div>
+        <div id="gcal-disconnected">
+          <button class="btn-gcal-connect" id="btn-gcal-connect">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="16" height="16" alt="G">
+            내 캘린더 연동
+          </button>
+        </div>
+        <div id="gcal-connected" class="hidden">
+          <div class="gcal-status-row">
+            <span class="gcal-dot"></span>
+            <span class="gcal-status-text">연동됨</span>
+          </div>
+          <div class="gcal-controls">
+            <label class="gcal-toggle-label">
+              <input type="checkbox" id="gcal-show-toggle">
+              캘린더 표시
+            </label>
+            <button class="btn-gcal-disconnect" id="btn-gcal-disconnect">연동 해제</button>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <!-- 캘린더 영역 -->

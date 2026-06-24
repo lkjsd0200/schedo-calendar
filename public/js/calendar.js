@@ -17,6 +17,11 @@ let hiddenParticipants = new Set();
 let selectedCategory = 'default';
 let pollTimer = null;
 
+// Google Calendar state
+let googleEvents = [];
+let googleCalConnected = false;
+let showGoogleCal = false;
+
 // ===== CATEGORIES =====
 function buildCategories() {
   CATEGORIES = {};
@@ -45,6 +50,7 @@ renderCategoryBtns();
 renderCalendar();
 renderChecklist();
 startPolling();
+initGoogleCal();
 
 // ===== POLLING =====
 function startPolling() {
@@ -110,7 +116,8 @@ function navigateDate(dir) {
   } else if (currentView === 'week') {
     currentDate = new Date(currentDate.getTime() + dir * 7 * 86400000);
   }
-  renderCalendar();
+  if (showGoogleCal) fetchGoogleEvents().then(() => renderCalendar());
+  else renderCalendar();
 }
 
 // ===== RENDER =====
@@ -170,6 +177,25 @@ function renderMonth() {
       const more = document.createElement('div');
       more.className = 'more-events';
       more.textContent = `+${dayEvents.length - 3}개`;
+      cell.appendChild(more);
+    }
+
+    // Google Calendar 이벤트 오버레이
+    const gEvents = getGoogleEventsForDate(dateStr);
+    const gSlots = Math.max(0, 3 - dayEvents.length);
+    gEvents.slice(0, gSlots).forEach(ev => {
+      const chip = document.createElement('div');
+      chip.className = 'event-chip gcal-chip';
+      const time = ev.start?.dateTime ? ev.start.dateTime.slice(11, 16) + ' ' : '';
+      chip.textContent = 'G ' + time + (ev.summary || '(제목 없음)');
+      chip.title = ev.summary || '';
+      chip.addEventListener('click', e => { e.stopPropagation(); showGcalPopup(ev, e); });
+      cell.appendChild(chip);
+    });
+    if (gEvents.length > gSlots) {
+      const more = document.createElement('div');
+      more.className = 'more-events';
+      more.textContent = `+G${gEvents.length - gSlots}개`;
       cell.appendChild(more);
     }
 
@@ -248,8 +274,53 @@ function renderWeek() {
       col.appendChild(el);
     });
 
+    // Google Calendar 이벤트 (시간 있는 것만 주간 뷰에 표시)
+    getGoogleEventsForDate(dateStr).forEach(ev => {
+      if (!ev.start?.dateTime) return;
+      const [sh, sm] = ev.start.dateTime.slice(11, 16).split(':').map(Number);
+      const endDt = ev.end?.dateTime;
+      const [eh, em] = endDt ? endDt.slice(11, 16).split(':').map(Number) : [sh + 1, 0];
+      const top = (sh * 60 + sm) / 60 * 48;
+      const height = Math.max(((eh * 60 + em) - (sh * 60 + sm)) / 60 * 48, 20);
+      const el = document.createElement('div');
+      el.className = 'week-event gcal-week-event';
+      el.style.cssText = `top:${top}px;height:${height}px`;
+      el.textContent = 'G ' + (ev.summary || '(제목 없음)');
+      el.addEventListener('click', e => { e.stopPropagation(); showGcalPopup(ev, e); });
+      col.appendChild(el);
+    });
+
     col.addEventListener('click', e => { if (!e.target.closest('.week-event')) closePopup(); });
     weekGrid.appendChild(col);
+  });
+}
+
+function showGcalPopup(ev, mouseEvent) {
+  const { start, end } = gEventDates(ev);
+  document.getElementById('popup-color').style.background = '#4285F4';
+  document.getElementById('popup-title').textContent = ev.summary || '(제목 없음)';
+  document.getElementById('popup-date').textContent = start !== end ? `${start} ~ ${end}` : start;
+  const timeEl = document.getElementById('popup-time');
+  if (ev.start?.dateTime) {
+    timeEl.textContent = ev.start.dateTime.slice(11, 16) + (ev.end?.dateTime ? ' ~ ' + ev.end.dateTime.slice(11, 16) : '');
+    timeEl.classList.remove('hidden');
+  } else { timeEl.classList.add('hidden'); }
+  let catEl = document.getElementById('popup-category');
+  if (!catEl) { catEl = document.createElement('p'); catEl.id = 'popup-category'; document.getElementById('popup-date').after(catEl); }
+  catEl.textContent = '📅 Google Calendar';
+  catEl.classList.remove('hidden');
+  document.getElementById('popup-participant').textContent = ev.organizer?.displayName ? `👤 ${ev.organizer.displayName}` : '';
+  const memoEl = document.getElementById('popup-memo');
+  if (ev.description) { memoEl.textContent = ev.description.replace(/<[^>]+>/g, ''); memoEl.classList.remove('hidden'); }
+  else memoEl.classList.add('hidden');
+  document.getElementById('popup-actions').innerHTML = '';
+  let x = mouseEvent.clientX + 8, y = mouseEvent.clientY + 8;
+  popup.style.left = x + 'px'; popup.style.top = y + 'px';
+  popup.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    const pr = popup.getBoundingClientRect();
+    if (pr.right > window.innerWidth - 10) popup.style.left = (x - pr.width - 16) + 'px';
+    if (pr.bottom > window.innerHeight - 10) popup.style.top = (y - pr.height - 16) + 'px';
   });
 }
 
@@ -750,6 +821,96 @@ document.addEventListener('keydown', e => {
     case 'Escape': closePopup(); checklistPanel.classList.remove('open'); break;
   }
 });
+
+// ===== GOOGLE CALENDAR =====
+async function initGoogleCal() {
+  // OAuth 콜백 결과 처리
+  if (location.hash === '#gcal-ok') {
+    history.replaceState(null, '', location.pathname);
+    showToast('Google Calendar가 연동되었습니다!');
+  } else if (location.hash === '#gcal-error') {
+    history.replaceState(null, '', location.pathname);
+    showToast('Google Calendar 연동에 실패했습니다.');
+  }
+
+  // 연동 상태 확인
+  try {
+    const res = await fetch(`/api/rooms/${roomId}/google-events?participantId=${me.id}&timeMin=${new Date().toISOString()}&timeMax=${new Date().toISOString()}`);
+    const data = await res.json();
+    googleCalConnected = !!data.connected;
+    updateGoogleCalUI();
+  } catch {}
+
+  // UI 이벤트
+  document.getElementById('btn-gcal-connect').addEventListener('click', () => {
+    location.href = `/api/auth/google?participantId=${me.id}`;
+  });
+  document.getElementById('btn-gcal-disconnect').addEventListener('click', disconnectGoogleCal);
+  document.getElementById('gcal-show-toggle').addEventListener('change', async e => {
+    showGoogleCal = e.target.checked;
+    if (showGoogleCal && googleEvents.length === 0) await fetchGoogleEvents();
+    renderCalendar();
+  });
+}
+
+function updateGoogleCalUI() {
+  document.getElementById('gcal-disconnected').classList.toggle('hidden', googleCalConnected);
+  document.getElementById('gcal-connected').classList.toggle('hidden', !googleCalConnected);
+  document.getElementById('gcal-show-toggle').checked = showGoogleCal;
+}
+
+async function fetchGoogleEvents() {
+  if (!googleCalConnected) return;
+  try {
+    const y = currentDate.getFullYear(), m = currentDate.getMonth();
+    const timeMin = new Date(y, m - 1, 1).toISOString();
+    const timeMax = new Date(y, m + 2, 0, 23, 59, 59).toISOString();
+    const res = await fetch(`/api/rooms/${roomId}/google-events?participantId=${me.id}&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`);
+    const data = await res.json();
+    if (data.connected) {
+      googleEvents = data.events || [];
+      googleCalConnected = true;
+    } else {
+      googleCalConnected = false;
+      showGoogleCal = false;
+      updateGoogleCalUI();
+    }
+  } catch {}
+}
+
+async function disconnectGoogleCal() {
+  if (!confirm('Google Calendar 연동을 해제할까요?')) return;
+  try {
+    await fetch(`/api/rooms/${roomId}/google-events?participantId=${me.id}`, { method: 'DELETE' });
+    googleCalConnected = false;
+    showGoogleCal = false;
+    googleEvents = [];
+    updateGoogleCalUI();
+    renderCalendar();
+    showToast('Google Calendar 연동이 해제되었습니다.');
+  } catch {}
+}
+
+// Google 이벤트를 날짜 문자열로 변환
+function gEventDates(ev) {
+  const start = ev.start?.date || ev.start?.dateTime?.slice(0, 10) || '';
+  let end = ev.end?.date || ev.end?.dateTime?.slice(0, 10) || start;
+  // 종일 이벤트의 end는 exclusive이므로 하루 빼기
+  if (ev.end?.date) {
+    const d = new Date(end);
+    d.setDate(d.getDate() - 1);
+    end = toDateStr(d);
+  }
+  return { start, end };
+}
+
+function getGoogleEventsForDate(dateStr) {
+  if (!showGoogleCal) return [];
+  return googleEvents.filter(ev => {
+    const { start, end } = gEventDates(ev);
+    return start <= dateStr && dateStr <= end;
+  });
+}
 
 // ===== UTILS =====
 function toDateStr(d) {

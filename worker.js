@@ -215,6 +215,125 @@ function getConfig(env) {
   return json({ googleClientId: env.GOOGLE_CLIENT_ID || '' });
 }
 
+// ===== GOOGLE CALENDAR =====
+
+function startGoogleAuth(env, url) {
+  const clientId = env.GOOGLE_CLIENT_ID;
+  const clientSecret = env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return new Response('Google OAuth가 설정되지 않았습니다. GOOGLE_CLIENT_ID와 GOOGLE_CLIENT_SECRET을 확인하세요.', { status: 500 });
+  }
+  const participantId = url.searchParams.get('participantId');
+  if (!participantId) return json({ error: 'participantId 필요' }, 400);
+
+  const redirectUri = `${url.origin}/api/auth/google/callback`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/calendar.readonly',
+    access_type: 'offline',
+    state: participantId,
+    prompt: 'consent'
+  });
+  return Response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`, 302);
+}
+
+async function handleGoogleCallback(env, url) {
+  const code = url.searchParams.get('code');
+  const participantId = url.searchParams.get('state');
+  if (!code || !participantId) {
+    return Response.redirect(`${url.origin}/calendar.html#gcal-error`, 302);
+  }
+
+  const redirectUri = `${url.origin}/api/auth/google/callback`;
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
+    })
+  });
+
+  const tokens = await tokenRes.json();
+  if (!tokens.access_token) {
+    return Response.redirect(`${url.origin}/calendar.html#gcal-error`, 302);
+  }
+
+  const expiresAt = Date.now() + (tokens.expires_in || 3600) * 1000;
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO google_tokens (participant_id, access_token, refresh_token, expires_at) VALUES (?, ?, ?, ?)'
+  ).bind(participantId, tokens.access_token, tokens.refresh_token || null, expiresAt).run();
+
+  return Response.redirect(`${url.origin}/calendar.html#gcal-ok`, 302);
+}
+
+async function getGoogleEvents(env, url) {
+  const participantId = url.searchParams.get('participantId');
+  if (!participantId) return json({ error: 'participantId 필요' }, 400);
+
+  const token = await env.DB.prepare('SELECT * FROM google_tokens WHERE participant_id = ?').bind(participantId).first();
+  if (!token) return json({ events: [], connected: false });
+
+  let accessToken = token.access_token;
+
+  if (Date.now() > token.expires_at - 300000) {
+    if (!token.refresh_token) {
+      await env.DB.prepare('DELETE FROM google_tokens WHERE participant_id = ?').bind(participantId).run();
+      return json({ events: [], connected: false });
+    }
+    const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        refresh_token: token.refresh_token,
+        grant_type: 'refresh_token'
+      })
+    });
+    const refreshed = await refreshRes.json();
+    if (!refreshed.access_token) {
+      await env.DB.prepare('DELETE FROM google_tokens WHERE participant_id = ?').bind(participantId).run();
+      return json({ events: [], connected: false });
+    }
+    accessToken = refreshed.access_token;
+    await env.DB.prepare('UPDATE google_tokens SET access_token=?, expires_at=? WHERE participant_id=?')
+      .bind(accessToken, Date.now() + (refreshed.expires_in || 3600) * 1000, participantId).run();
+  }
+
+  const timeMin = url.searchParams.get('timeMin') || new Date().toISOString();
+  const timeMax = url.searchParams.get('timeMax') || new Date(Date.now() + 30 * 86400000).toISOString();
+
+  const calRes = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+    `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=200`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  const calData = await calRes.json();
+  if (calData.error) {
+    if (calData.error.code === 401) {
+      await env.DB.prepare('DELETE FROM google_tokens WHERE participant_id = ?').bind(participantId).run();
+      return json({ events: [], connected: false });
+    }
+    return json({ error: calData.error.message }, 500);
+  }
+
+  return json({ events: calData.items || [], connected: true });
+}
+
+async function disconnectGoogle(url, env) {
+  const participantId = url.searchParams.get('participantId');
+  if (!participantId) return json({ error: 'participantId 필요' }, 400);
+  await env.DB.prepare('DELETE FROM google_tokens WHERE participant_id = ?').bind(participantId).run();
+  return json({ ok: true });
+}
+
 // ===== ROUTER =====
 
 async function handleAPI(request, env, url) {
@@ -223,6 +342,13 @@ async function handleAPI(request, env, url) {
 
   try {
     if (parts[0] === 'config' && method === 'GET') return getConfig(env);
+
+    // Google OAuth routes
+    if (parts[0] === 'auth' && parts[1] === 'google') {
+      if (!parts[2] && method === 'GET') return startGoogleAuth(env, url);
+      if (parts[2] === 'callback' && method === 'GET') return handleGoogleCallback(env, url);
+    }
+
     if (parts[0] !== 'rooms') return json({ error: '잘못된 요청' }, 404);
 
     if (parts.length === 1 && method === 'POST') return createRoom(request, env);
@@ -259,6 +385,11 @@ async function handleAPI(request, env, url) {
         } else {
           if (method === 'DELETE') return deleteCategory(request, env, roomId, parts[3]);
         }
+      }
+
+      if (action === 'google-events') {
+        if (method === 'GET') return getGoogleEvents(env, url);
+        if (method === 'DELETE') return disconnectGoogle(url, env);
       }
     }
 
