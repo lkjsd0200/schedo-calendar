@@ -7,7 +7,7 @@ directory = "./public"
 binding = "ASSETS"
 
 [vars]
-GOOGLE_CLIENT_ID = ""  # Google Cloud Console에서 발급받은 클라이언트 ID 입력
+GOOGLE_CLIENT_ID = "356191587888-hn68tnrrsl8u222slgm1holv75nt6nh5.apps.googleusercontent.com"
 
 [[d1_databases]]
 binding = "DB"
