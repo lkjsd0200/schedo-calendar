@@ -271,18 +271,39 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .category-selector { display: flex; flex-wrap: wrap; gap: 5px; }
 .cat-btn {
   padding: 4px 10px; border-radius: 20px; border: 1.5px solid var(--border);
-  font-size: 12px; cursor: pointer; transition: all .15s; background: var(--bg); color: var(--text);
-  white-space: nowrap;
+  font-size: 12px; cursor: pointer; transition: border-color .15s, background .15s;
+  background: var(--bg); color: var(--text); white-space: nowrap;
 }
 .cat-btn:hover { border-color: #aaa; }
-.cat-btn.active { color: #fff; border-color: transparent; }
-.cat-btn[data-cat="default"].active  { background: var(--primary); }
-.cat-btn[data-cat="online"].active   { background: #3B82F6; }
-.cat-btn[data-cat="annual"].active   { background: #F59E0B; }
-.cat-btn[data-cat="half"].active     { background: #FBBF24; color: #333; }
-.cat-btn[data-cat="quarter"].active  { background: #A78BFA; }
-.cat-btn[data-cat="field"].active    { background: #10B981; }
-.cat-btn[data-cat="dept"].active     { background: #8B5CF6; }
+
+/* ===== CAT SETTINGS BUTTON ===== */
+.btn-cat-settings {
+  padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; color: var(--text-muted); transition: all .15s;
+}
+.btn-cat-settings:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ===== CATEGORY MANAGE MODAL ===== */
+.btn-link-sm { font-size: 11px; color: var(--primary); cursor: pointer; padding: 0 4px; text-decoration: underline; font-weight: 400; }
+.btn-link-sm:hover { color: var(--primary-dark); }
+
+.cat-manage-list { list-style: none; max-height: 260px; overflow-y: auto; margin-bottom: 10px; }
+.cat-manage-item { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.cat-manage-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cat-manage-icon { font-size: 16px; flex-shrink: 0; width: 22px; text-align: center; }
+.cat-manage-label { flex: 1; font-size: 13px; color: var(--text); }
+.btn-cat-del { padding: 4px 8px; font-size: 13px; color: var(--text-muted); border-radius: 5px; transition: all .15s; flex-shrink: 0; }
+.btn-cat-del:hover { background: #fff0f0; color: var(--danger); }
+
+.cat-add-divider { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; margin: 12px 0 8px; }
+.cat-add-row { display: flex; align-items: center; gap: 6px; }
+.cat-icon-input { width: 48px; padding: 7px 6px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 16px; text-align: center; outline: none; }
+.cat-icon-input:focus { border-color: var(--primary); }
+.cat-add-row input[type="text"] { flex: 1; padding: 7px 10px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 13px; outline: none; min-width: 0; }
+.cat-add-row input[type="text"]:focus { border-color: var(--primary); }
+.cat-color-input { width: 36px; height: 34px; padding: 2px 3px; border: 1.5px solid var(--border); border-radius: 7px; cursor: pointer; flex-shrink: 0; }
+.btn-cat-add-main { padding: 7px 14px; background: var(--primary); color: #fff; border-radius: 7px; font-size: 13px; font-weight: 600; flex-shrink: 0; transition: background .15s; white-space: nowrap; }
+.btn-cat-add-main:hover { background: var(--primary-dark); }
 
 /* ===== CHECKLIST BUTTON ===== */
 .btn-checklist {

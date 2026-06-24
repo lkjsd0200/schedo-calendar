@@ -28,6 +28,7 @@
       </div>
       <button class="btn-add-event" id="btn-add-event" title="일정 추가 (N)">+ 일정 추가</button>
       <button class="btn-checklist" id="btn-checklist" title="체크리스트 (L)">☑ 체크리스트</button>
+      <button class="btn-cat-settings" id="btn-cat-settings" title="카테고리 관리">⚙ 카테고리</button>
       <button class="btn-share" id="btn-share" title="공유">공유</button>
     </div>
   </header>
@@ -96,15 +97,12 @@
           <input type="text" id="ev-title" placeholder="일정 제목" maxlength="50" autofocus>
         </div>
         <div class="form-group">
-          <label>카테고리</label>
+          <label>
+            카테고리
+            <button type="button" class="btn-link-sm" id="btn-open-cat-manage">관리</button>
+          </label>
           <div class="category-selector" id="ev-category">
-            <button class="cat-btn active" data-cat="default" type="button">📋 일반</button>
-            <button class="cat-btn" data-cat="online" type="button">🖥️ 온라인행사</button>
-            <button class="cat-btn" data-cat="annual" type="button">🏖️ 연차</button>
-            <button class="cat-btn" data-cat="half" type="button">☀️ 반차</button>
-            <button class="cat-btn" data-cat="quarter" type="button">☕ 반반차</button>
-            <button class="cat-btn" data-cat="field" type="button">🚗 외근</button>
-            <button class="cat-btn" data-cat="dept" type="button">👥 부서일정</button>
+            <!-- JS로 동적 렌더링 -->
           </div>
         </div>
         <div class="form-group">
@@ -145,6 +143,26 @@
     </div>
   </div>
 
+  <!-- 카테고리 관리 모달 -->
+  <div class="modal-overlay hidden" id="cat-modal">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>카테고리 관리</h3>
+        <button class="modal-close" id="cat-modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <ul class="cat-manage-list" id="cat-manage-list"></ul>
+        <div class="cat-add-divider">새 카테고리 추가</div>
+        <div class="cat-add-row">
+          <input type="text" id="cat-new-icon" placeholder="🏷" maxlength="4" class="cat-icon-input" title="이모지 입력">
+          <input type="text" id="cat-new-label" placeholder="카테고리 이름" maxlength="12">
+          <input type="color" id="cat-new-color" value="#4A90D9" class="cat-color-input" title="색상 선택">
+          <button class="btn-cat-add-main" id="btn-cat-add">추가</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 공유 모달 -->
   <div class="modal-overlay hidden" id="share-modal">
     <div class="modal modal-sm">
@@ -153,7 +171,7 @@
         <button class="modal-close" id="share-modal-close">✕</button>
       </div>
       <div class="modal-body">
-        <p>아래 방 코드와 비밀번호를 공유하세요.</p>
+        <p>아래 방 코드를 공유하면 누구나 입장할 수 있습니다.</p>
         <div class="share-info">
           <div class="share-row">
             <span class="share-label">방 코드</span>
@@ -161,7 +179,6 @@
             <button class="btn-copy-sm" id="btn-copy-share">복사</button>
           </div>
         </div>
-        <p class="share-note">비밀번호는 방 생성 시 설정한 값입니다.</p>
       </div>
     </div>
   </div>

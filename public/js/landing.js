@@ -6,9 +6,9 @@ function loadSavedRooms() {
   catch { return []; }
 }
 
-function saveRoom(roomId, roomName, participantName, participantColor, password) {
+function saveRoom(roomId, roomName, participantName, participantColor) {
   const rooms = loadSavedRooms().filter(r => r.roomId !== roomId);
-  rooms.unshift({ roomId, roomName, participantName, participantColor, password, lastVisited: Date.now() });
+  rooms.unshift({ roomId, roomName, participantName, participantColor, lastVisited: Date.now() });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms.slice(0, 10)));
 }
 
@@ -65,22 +65,24 @@ async function autoLogin(room) {
   try {
     const res = await fetch(`/api/rooms/${room.roomId}/join`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: room.password, participantName: room.participantName, participantColor: room.participantColor })
+      body: JSON.stringify({ participantName: room.participantName, participantColor: room.participantColor })
     });
     const data = await res.json();
     if (!res.ok) {
-      // 비밀번호 오류 등 → 수동 입력 폼으로
       document.getElementById('join-room-id').value = room.roomId;
       document.getElementById('join-name').value = room.participantName;
       document.getElementById('join-color').value = room.participantColor;
       document.querySelector('[data-tab="join"]').click();
-      errEl.textContent = data.error + ' — 비밀번호를 다시 입력해주세요.';
+      errEl.textContent = data.error;
       return;
     }
-    saveRoom(room.roomId, data.room.name, data.participant.name, data.participant.color, room.password);
+    saveRoom(room.roomId, data.room.name, data.participant.name, data.participant.color);
     sessionStorage.setItem('calSession', JSON.stringify({
       roomId: data.room.id, roomName: data.room.name,
-      participant: data.participant, events: data.events, participants: data.participants
+      participant: data.participant, events: data.events,
+      participants: data.participants,
+      checklists: data.checklists || [],
+      categories: data.categories || []
     }));
     location.href = '/calendar.html';
   } catch { errEl.textContent = '서버 오류가 발생했습니다.'; }
@@ -162,20 +164,17 @@ initGoogleLogin();
 
 // ===== 방 만들기 =====
 document.getElementById('btn-create').addEventListener('click', createRoom);
-document.getElementById('create-password').addEventListener('keydown', e => { if (e.key === 'Enter') createRoom(); });
 document.getElementById('create-name').addEventListener('keydown', e => { if (e.key === 'Enter') createRoom(); });
 
 async function createRoom() {
   const name = document.getElementById('create-name').value.trim();
-  const password = document.getElementById('create-password').value;
   const errEl = document.getElementById('create-error');
   errEl.textContent = '';
   if (!name) { errEl.textContent = '캘린더 이름을 입력하세요.'; return; }
-  if (!password) { errEl.textContent = '비밀번호를 입력하세요.'; return; }
   try {
     const res = await fetch('/api/rooms', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, password })
+      body: JSON.stringify({ name })
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error; return; }
@@ -195,36 +194,37 @@ document.getElementById('btn-copy-code').addEventListener('click', () => {
 
 // ===== 방 입장 =====
 document.getElementById('btn-join').addEventListener('click', joinRoom);
-['join-room-id', 'join-password', 'join-name'].forEach(id => {
+['join-room-id', 'join-name'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
 });
 
 async function joinRoom() {
   const roomId = document.getElementById('join-room-id').value.trim();
-  const password = document.getElementById('join-password').value;
   const name = document.getElementById('join-name').value.trim() || (googleUserData && googleUserData.name);
   const color = document.getElementById('join-color').value;
   const errEl = document.getElementById('join-error');
   errEl.textContent = '';
   if (!roomId) { errEl.textContent = '방 코드를 입력하세요.'; return; }
-  if (!password) { errEl.textContent = '비밀번호를 입력하세요.'; return; }
   if (!name) { errEl.textContent = '이름을 입력하세요.'; return; }
   try {
     const res = await fetch(`/api/rooms/${roomId}/join`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, participantName: name, participantColor: color,
+      body: JSON.stringify({
+        participantName: name, participantColor: color,
         googleId: googleUserData ? googleUserData.sub : null,
-        googlePicture: googleUserData ? googleUserData.picture : null })
+        googlePicture: googleUserData ? googleUserData.picture : null
+      })
     });
     const data = await res.json();
     if (!res.ok) { errEl.textContent = data.error; return; }
 
-    // 자동 로그인을 위해 저장
-    saveRoom(data.room.id, data.room.name, data.participant.name, data.participant.color, password);
-
+    saveRoom(data.room.id, data.room.name, data.participant.name, data.participant.color);
     sessionStorage.setItem('calSession', JSON.stringify({
       roomId: data.room.id, roomName: data.room.name,
-      participant: data.participant, events: data.events, participants: data.participants
+      participant: data.participant, events: data.events,
+      participants: data.participants,
+      checklists: data.checklists || [],
+      categories: data.categories || []
     }));
     location.href = '/calendar.html';
   } catch { errEl.textContent = '서버 오류가 발생했습니다.'; }

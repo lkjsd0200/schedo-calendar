@@ -1,3 +1,12 @@
+// ===== DEFAULT CATEGORIES =====
+const DEFAULT_CATEGORIES = [
+  { key: 'default', label: '일반',     icon: '📋', color: null },
+  { key: 'online',  label: '온라인행사', icon: '🖥️', color: '#3B82F6' },
+  { key: 'leave',   label: '연·반차',  icon: '🏖️', color: '#F59E0B' },
+  { key: 'field',   label: '외근',     icon: '🚗', color: '#10B981' },
+  { key: 'dept',    label: '부서일정', icon: '👥', color: '#8B5CF6' },
+];
+
 // ===== HELPERS =====
 
 function json(data, status = 200) {
@@ -35,22 +44,45 @@ function randomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
+async function getOrSeedCategories(env, roomId) {
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM categories WHERE room_id = ? ORDER BY sort_order ASC, created_at ASC'
+  ).bind(roomId).all();
+  if (results.length > 0) return results;
+
+  const stmts = DEFAULT_CATEGORIES.map((c, i) =>
+    env.DB.prepare('INSERT INTO categories (id, room_id, key, label, icon, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(), roomId, c.key, c.label, c.icon, c.color || null, i)
+  );
+  await env.DB.batch(stmts);
+
+  const { results: seeded } = await env.DB.prepare(
+    'SELECT * FROM categories WHERE room_id = ? ORDER BY sort_order ASC'
+  ).bind(roomId).all();
+  return seeded;
+}
+
 // ===== ROOMS =====
 
 async function createRoom(request, env) {
-  const { name, password } = await request.json();
-  if (!name || !password) return json({ error: '이름과 비밀번호를 입력하세요.' }, 400);
+  const { name } = await request.json();
+  if (!name) return json({ error: '이름을 입력하세요.' }, 400);
   const id = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-  const hash = await hashPassword(password);
-  await env.DB.prepare('INSERT INTO rooms (id, name, password_hash) VALUES (?, ?, ?)').bind(id, name, hash).run();
+  await env.DB.prepare('INSERT INTO rooms (id, name, password_hash) VALUES (?, ?, ?)').bind(id, name, '').run();
+
+  const stmts = DEFAULT_CATEGORIES.map((c, i) =>
+    env.DB.prepare('INSERT INTO categories (id, room_id, key, label, icon, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(), id, c.key, c.label, c.icon, c.color || null, i)
+  );
+  await env.DB.batch(stmts);
+
   return json({ id, name });
 }
 
 async function joinRoom(request, env, roomId) {
-  const { password, participantName, participantColor } = await request.json();
+  const { participantName, participantColor } = await request.json();
   const room = await env.DB.prepare('SELECT * FROM rooms WHERE id = ?').bind(roomId).first();
   if (!room) return json({ error: '방을 찾을 수 없습니다.' }, 404);
-  if (!(await verifyPassword(password, room.password_hash))) return json({ error: '비밀번호가 틀렸습니다.' }, 401);
 
   let participant = await env.DB.prepare('SELECT * FROM participants WHERE room_id = ? AND name = ?').bind(roomId, participantName).first();
   if (!participant) {
@@ -63,14 +95,16 @@ async function joinRoom(request, env, roomId) {
   const { results: events } = await env.DB.prepare('SELECT * FROM events WHERE room_id = ?').bind(roomId).all();
   const { results: participants } = await env.DB.prepare('SELECT * FROM participants WHERE room_id = ?').bind(roomId).all();
   const { results: checklists } = await env.DB.prepare('SELECT * FROM checklists WHERE room_id = ? ORDER BY created_at ASC').bind(roomId).all();
-  return json({ room: { id: room.id, name: room.name }, participant, events, participants, checklists });
+  const categories = await getOrSeedCategories(env, roomId);
+  return json({ room: { id: room.id, name: room.name }, participant, events, participants, checklists, categories });
 }
 
 async function syncRoom(env, roomId) {
   const { results: events } = await env.DB.prepare('SELECT * FROM events WHERE room_id = ?').bind(roomId).all();
   const { results: participants } = await env.DB.prepare('SELECT * FROM participants WHERE room_id = ?').bind(roomId).all();
   const { results: checklists } = await env.DB.prepare('SELECT * FROM checklists WHERE room_id = ? ORDER BY created_at ASC').bind(roomId).all();
-  return json({ events, participants, checklists });
+  const categories = await getOrSeedCategories(env, roomId);
+  return json({ events, participants, checklists, categories });
 }
 
 // ===== EVENTS =====
@@ -143,6 +177,38 @@ async function deleteChecklist(request, env, roomId, itemId) {
   return json({ ok: true });
 }
 
+// ===== CATEGORIES =====
+
+async function addCategory(request, env, roomId) {
+  const room = await env.DB.prepare('SELECT id FROM rooms WHERE id = ?').bind(roomId).first();
+  if (!room) return json({ error: '방 없음' }, 404);
+
+  const { label, icon, color } = await request.json();
+  if (!label || !label.trim()) return json({ error: '이름을 입력하세요.' }, 400);
+
+  const existing = await env.DB.prepare('SELECT MAX(sort_order) as m FROM categories WHERE room_id = ?').bind(roomId).first();
+  const sortOrder = (existing?.m ?? -1) + 1;
+
+  const id = crypto.randomUUID();
+  const key = id.replace(/-/g, '').slice(0, 12);
+  await env.DB.prepare(
+    'INSERT INTO categories (id, room_id, key, label, icon, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, roomId, key, label.trim(), icon || '📋', color || null, sortOrder).run();
+
+  return json(await env.DB.prepare('SELECT * FROM categories WHERE id = ?').bind(id).first());
+}
+
+async function deleteCategory(request, env, roomId, catId) {
+  const cat = await env.DB.prepare('SELECT * FROM categories WHERE id = ? AND room_id = ?').bind(catId, roomId).first();
+  if (!cat) return json({ error: '카테고리 없음' }, 404);
+
+  const { count } = await env.DB.prepare('SELECT COUNT(*) as count FROM categories WHERE room_id = ?').bind(roomId).first();
+  if (count <= 1) return json({ error: '마지막 카테고리는 삭제할 수 없습니다.' }, 400);
+
+  await env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(catId).run();
+  return json({ ok: true });
+}
+
 // ===== CONFIG =====
 
 function getConfig(env) {
@@ -184,6 +250,14 @@ async function handleAPI(request, env, url) {
         } else {
           if (method === 'PUT') return toggleChecklist(request, env, roomId, parts[3]);
           if (method === 'DELETE') return deleteChecklist(request, env, roomId, parts[3]);
+        }
+      }
+
+      if (action === 'categories') {
+        if (!parts[3]) {
+          if (method === 'POST') return addCategory(request, env, roomId);
+        } else {
+          if (method === 'DELETE') return deleteCategory(request, env, roomId, parts[3]);
         }
       }
     }

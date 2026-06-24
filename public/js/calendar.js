@@ -1,14 +1,3 @@
-// ===== CATEGORIES =====
-const CATEGORIES = {
-  'default': { label: '일반',     icon: '📋', color: null },
-  'online':  { label: '온라인행사', icon: '🖥️', color: '#3B82F6' },
-  'annual':  { label: '연차',     icon: '🏖️', color: '#F59E0B' },
-  'half':    { label: '반차',     icon: '☀️', color: '#FBBF24' },
-  'quarter': { label: '반반차',   icon: '☕', color: '#A78BFA' },
-  'field':   { label: '외근',     icon: '🚗', color: '#10B981' },
-  'dept':    { label: '부서일정', icon: '👥', color: '#8B5CF6' },
-};
-
 // ===== STATE =====
 const session = JSON.parse(sessionStorage.getItem('calSession') || 'null');
 if (!session) { location.href = '/'; }
@@ -18,6 +7,9 @@ let me = session.participant;
 let events = session.events || [];
 let participants = session.participants || [];
 let checklists = session.checklists || [];
+let categoriesArr = session.categories || [];
+let CATEGORIES = {};
+
 let currentView = 'month';
 let currentDate = new Date();
 let editingEventId = null;
@@ -25,12 +17,31 @@ let hiddenParticipants = new Set();
 let selectedCategory = 'default';
 let pollTimer = null;
 
+// ===== CATEGORIES =====
+function buildCategories() {
+  CATEGORIES = {};
+  categoriesArr.forEach(c => {
+    CATEGORIES[c.key] = { id: c.id, label: c.label, icon: c.icon, color: c.color || null };
+  });
+}
+
+function getCat(key) {
+  return CATEGORIES[key] || { label: '', icon: '', color: null };
+}
+
+function getEventColor(ev, p) {
+  const cat = getCat(ev.category);
+  return cat.color || (p ? p.color : '#888');
+}
+
 // ===== INIT =====
+buildCategories();
 document.getElementById('room-name-display').textContent = roomName;
 document.getElementById('my-name-display').textContent = me.name;
 document.getElementById('my-color-badge').style.background = me.color;
 document.getElementById('share-code-display').textContent = roomId;
 renderParticipants();
+renderCategoryBtns();
 renderCalendar();
 renderChecklist();
 startPolling();
@@ -46,6 +57,7 @@ function startPolling() {
       const evChanged = JSON.stringify(data.events) !== JSON.stringify(events);
       const pChanged = JSON.stringify(data.participants) !== JSON.stringify(participants);
       const clChanged = JSON.stringify(data.checklists) !== JSON.stringify(checklists);
+      const catChanged = JSON.stringify(data.categories) !== JSON.stringify(categoriesArr);
       if (evChanged || pChanged) {
         events = data.events || [];
         participants = data.participants || [];
@@ -55,6 +67,13 @@ function startPolling() {
       if (clChanged) {
         checklists = data.checklists || [];
         renderChecklist();
+      }
+      if (catChanged) {
+        categoriesArr = data.categories || [];
+        buildCategories();
+        renderCategoryBtns();
+        renderCatManageList();
+        renderCalendar();
       }
     } catch {}
   }, 5000);
@@ -70,6 +89,7 @@ document.getElementById('share-modal-close').addEventListener('click', () => doc
 document.getElementById('btn-copy-share').addEventListener('click', () => {
   navigator.clipboard.writeText(roomId).then(() => showToast('방 코드가 복사되었습니다!'));
 });
+document.getElementById('btn-cat-settings').addEventListener('click', openCatModal);
 
 document.querySelectorAll('.view-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -136,13 +156,12 @@ function renderMonth() {
       const chip = document.createElement('div');
       chip.className = 'event-chip';
       const p = participants.find(p => p.id === ev.participant_id);
-      const cat = CATEGORIES[ev.category] || CATEGORIES['default'];
-      chip.style.background = cat.color || (p ? p.color : '#888');
+      const cat = getCat(ev.category);
+      chip.style.background = getEventColor(ev, p);
       const isStart = ev.date === dateStr;
       const timePrefix = (!ev.all_day && ev.start_time && isStart) ? `${ev.start_time.slice(0,5)} ` : '';
-      const catIcon = (ev.category && ev.category !== 'default') ? cat.icon + ' ' : '';
+      const catIcon = cat.icon ? cat.icon + ' ' : '';
       chip.textContent = catIcon + timePrefix + ev.title;
-      chip.dataset.eventId = ev.id;
       chip.addEventListener('click', e => { e.stopPropagation(); showEventPopup(ev, e); });
       cell.appendChild(chip);
     });
@@ -216,23 +235,20 @@ function renderWeek() {
     }).forEach(ev => {
       if (ev.all_day || !ev.start_time) return;
       const p = participants.find(p => p.id === ev.participant_id);
-      const cat = CATEGORIES[ev.category] || CATEGORIES['default'];
+      const cat = getCat(ev.category);
       const [sh, sm] = ev.start_time.split(':').map(Number);
       const [eh, em] = (ev.end_time || `${sh + 1}:00`).split(':').map(Number);
       const top = (sh * 60 + sm) / 60 * 48;
       const height = Math.max(((eh * 60 + em) - (sh * 60 + sm)) / 60 * 48, 20);
       const el = document.createElement('div');
       el.className = 'week-event';
-      el.style.cssText = `top:${top}px;height:${height}px;background:${cat.color || (p ? p.color : '#888')}`;
-      const catIcon = (ev.category && ev.category !== 'default') ? cat.icon + ' ' : '';
-      el.textContent = catIcon + ev.title;
+      el.style.cssText = `top:${top}px;height:${height}px;background:${getEventColor(ev, p)}`;
+      el.textContent = (cat.icon ? cat.icon + ' ' : '') + ev.title;
       el.addEventListener('click', e => { e.stopPropagation(); showEventPopup(ev, e); });
       col.appendChild(el);
     });
 
-    col.addEventListener('click', e => {
-      if (!e.target.closest('.week-event')) closePopup();
-    });
+    col.addEventListener('click', e => { if (!e.target.closest('.week-event')) closePopup(); });
     weekGrid.appendChild(col);
   });
 }
@@ -245,22 +261,23 @@ function renderCategory() {
 
   const visibleEvents = events.filter(e => !hiddenParticipants.has(e.participant_id));
 
-  Object.entries(CATEGORIES).forEach(([key, cat]) => {
-    const catEvents = visibleEvents.filter(e => (e.category || 'default') === key);
+  categoriesArr.forEach(catRow => {
+    const cat = getCat(catRow.key);
+    const catEvents = visibleEvents.filter(e => (e.category || 'default') === catRow.key);
+    const catColor = catRow.color || '#4A90D9';
 
     const card = document.createElement('div');
     card.className = 'cat-card';
 
-    const header = document.createElement('div');
-    header.className = 'cat-card-header';
-    const catColor = cat.color || '#4A90D9';
-    header.style.borderLeftColor = catColor;
-    header.innerHTML = `
-      <span class="cat-card-icon">${cat.icon}</span>
-      <span class="cat-card-label">${cat.label}</span>
+    const hdr = document.createElement('div');
+    hdr.className = 'cat-card-header';
+    hdr.style.borderLeftColor = catColor;
+    hdr.innerHTML = `
+      <span class="cat-card-icon">${catRow.icon}</span>
+      <span class="cat-card-label">${catRow.label}</span>
       <span class="cat-card-count" style="background:${catColor}">${catEvents.length}</span>
     `;
-    card.appendChild(header);
+    card.appendChild(hdr);
 
     const body = document.createElement('div');
     body.className = 'cat-card-body';
@@ -271,8 +288,7 @@ function renderCategory() {
       empty.textContent = '일정 없음';
       body.appendChild(empty);
     } else {
-      const sorted = [...catEvents].sort((a, b) => a.date.localeCompare(b.date));
-      sorted.forEach(ev => {
+      [...catEvents].sort((a, b) => a.date.localeCompare(b.date)).forEach(ev => {
         const p = participants.find(p => p.id === ev.participant_id);
         const row = document.createElement('div');
         row.className = 'cat-event-row';
@@ -283,7 +299,7 @@ function renderCategory() {
             <div class="cat-ev-meta">${ev.date}${ev.end_date && ev.end_date !== ev.date ? ' ~ ' + ev.end_date : ''} · ${p ? p.name : '?'}</div>
           </div>
         `;
-        row.addEventListener('click', e => { showEventPopup(ev, e); });
+        row.addEventListener('click', e => showEventPopup(ev, e));
         body.appendChild(row);
       });
     }
@@ -310,6 +326,121 @@ function renderParticipants() {
   });
 }
 
+// ===== CATEGORY BUTTONS (event modal) =====
+function renderCategoryBtns() {
+  const container = document.getElementById('ev-category');
+  container.innerHTML = '';
+  categoriesArr.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cat-btn';
+    btn.dataset.cat = cat.key;
+    btn.textContent = `${cat.icon} ${cat.label}`;
+    btn.addEventListener('click', () => setCategory(cat.key));
+    container.appendChild(btn);
+  });
+  setCategory(selectedCategory);
+}
+
+function setCategory(key) {
+  const keys = Object.keys(CATEGORIES);
+  if (!CATEGORIES[key] && keys.length > 0) key = keys[0];
+  selectedCategory = key;
+  document.querySelectorAll('#ev-category .cat-btn').forEach(btn => {
+    const isActive = btn.dataset.cat === key;
+    btn.classList.toggle('active', isActive);
+    if (isActive) {
+      const cat = CATEGORIES[key];
+      btn.style.background = cat?.color || '#4A90D9';
+      btn.style.borderColor = 'transparent';
+      btn.style.color = '#fff';
+    } else {
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }
+  });
+}
+
+// ===== CATEGORY MANAGEMENT MODAL =====
+const catModal = document.getElementById('cat-modal');
+
+function openCatModal() {
+  renderCatManageList();
+  catModal.classList.remove('hidden');
+}
+function closeCatModal() { catModal.classList.add('hidden'); }
+
+document.getElementById('cat-modal-close').addEventListener('click', closeCatModal);
+document.getElementById('btn-open-cat-manage').addEventListener('click', () => {
+  closeModal();
+  openCatModal();
+});
+
+document.getElementById('btn-cat-add').addEventListener('click', addCategoryUI);
+document.getElementById('cat-new-label').addEventListener('keydown', e => { if (e.key === 'Enter') addCategoryUI(); });
+
+function renderCatManageList() {
+  const ul = document.getElementById('cat-manage-list');
+  ul.innerHTML = '';
+  if (categoriesArr.length === 0) {
+    ul.innerHTML = '<li style="padding:12px;color:var(--text-muted);font-size:13px;">카테고리가 없습니다.</li>';
+    return;
+  }
+  categoriesArr.forEach(cat => {
+    const li = document.createElement('li');
+    li.className = 'cat-manage-item';
+    const dotColor = cat.color || '#4A90D9';
+    li.innerHTML = `
+      <span class="cat-manage-dot" style="background:${dotColor}"></span>
+      <span class="cat-manage-icon">${cat.icon}</span>
+      <span class="cat-manage-label">${cat.label}</span>
+      <button class="btn-cat-del" title="삭제">🗑</button>
+    `;
+    li.querySelector('.btn-cat-del').addEventListener('click', () => deleteCategoryUI(cat.id));
+    ul.appendChild(li);
+  });
+}
+
+async function addCategoryUI() {
+  const icon = document.getElementById('cat-new-icon').value.trim() || '📋';
+  const label = document.getElementById('cat-new-label').value.trim();
+  const color = document.getElementById('cat-new-color').value;
+  if (!label) { showToast('카테고리 이름을 입력하세요.'); return; }
+
+  try {
+    const res = await fetch(`/api/rooms/${roomId}/categories`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon, label, color })
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || '추가 실패'); return; }
+    categoriesArr.push(data);
+    buildCategories();
+    renderCatManageList();
+    renderCategoryBtns();
+    renderCalendar();
+    document.getElementById('cat-new-icon').value = '';
+    document.getElementById('cat-new-label').value = '';
+    showToast(`'${label}' 카테고리가 추가되었습니다.`);
+  } catch { showToast('서버 오류가 발생했습니다.'); }
+}
+
+async function deleteCategoryUI(catId) {
+  if (!confirm('이 카테고리를 삭제할까요?')) return;
+  try {
+    const res = await fetch(`/api/rooms/${roomId}/categories/${catId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || '삭제 실패'); return; }
+    categoriesArr = categoriesArr.filter(c => c.id !== catId);
+    buildCategories();
+    renderCatManageList();
+    renderCategoryBtns();
+    renderCalendar();
+    showToast('카테고리가 삭제되었습니다.');
+  } catch { showToast('서버 오류가 발생했습니다.'); }
+}
+
 // ===== CHECKLIST =====
 const checklistPanel = document.getElementById('checklist-panel');
 const checklistInput = document.getElementById('checklist-input');
@@ -321,7 +452,6 @@ document.getElementById('btn-checklist').addEventListener('click', () => {
 document.getElementById('checklist-close').addEventListener('click', () => {
   checklistPanel.classList.remove('open');
 });
-
 document.getElementById('btn-checklist-add').addEventListener('click', addChecklistItem);
 checklistInput.addEventListener('keydown', e => { if (e.key === 'Enter') addChecklistItem(); });
 
@@ -396,7 +526,6 @@ function renderChecklist() {
     const del = document.createElement('button');
     del.className = 'checklist-del';
     del.textContent = '✕';
-    del.title = '삭제';
     del.addEventListener('click', () => deleteChecklistItem(item.id));
 
     li.appendChild(cb);
@@ -420,21 +549,6 @@ const timeRow = document.getElementById('time-row');
 const btnSave = document.getElementById('btn-save-event');
 const btnDelete = document.getElementById('btn-delete-event');
 
-document.querySelectorAll('.cat-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    selectedCategory = btn.dataset.cat;
-  });
-});
-
-function setCategory(cat) {
-  selectedCategory = cat || 'default';
-  document.querySelectorAll('.cat-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.cat === selectedCategory);
-  });
-}
-
 evAllDay.addEventListener('change', () => {
   timeRow.classList.toggle('hidden', evAllDay.checked);
 });
@@ -453,7 +567,7 @@ function openModal(eventId, dateStr, timeStr) {
   evStartTime.value = ev ? (ev.start_time || '') : (timeStr || '');
   evEndTime.value = ev ? (ev.end_time || '') : '';
   evMemo.value = ev ? (ev.memo || '') : '';
-  setCategory(ev ? ev.category : 'default');
+  setCategory(ev ? (ev.category || 'default') : (Object.keys(CATEGORIES)[0] || 'default'));
 
   btnDelete.classList.toggle('hidden', !ev || !isOwner);
   evTitle.readOnly = !isOwner && !!ev;
@@ -526,8 +640,8 @@ const popup = document.getElementById('event-popup');
 
 function showEventPopup(ev, mouseEvent) {
   const p = participants.find(p => p.id === ev.participant_id);
-  const cat = CATEGORIES[ev.category] || CATEGORIES['default'];
-  const chipColor = cat.color || (p ? p.color : '#888');
+  const cat = getCat(ev.category);
+  const chipColor = getEventColor(ev, p);
 
   document.getElementById('popup-color').style.background = chipColor;
   document.getElementById('popup-title').textContent = ev.title;
@@ -547,8 +661,12 @@ function showEventPopup(ev, mouseEvent) {
     catEl.id = 'popup-category';
     document.getElementById('popup-date').after(catEl);
   }
-  catEl.textContent = `${cat.icon} ${cat.label}`;
-  catEl.className = ev.category !== 'default' ? '' : 'hidden';
+  if (cat.icon && cat.label) {
+    catEl.textContent = `${cat.icon} ${cat.label}`;
+    catEl.classList.remove('hidden');
+  } else {
+    catEl.classList.add('hidden');
+  }
 
   document.getElementById('popup-participant').textContent = `👤 ${p ? p.name : '알 수 없음'}`;
   const memoEl = document.getElementById('popup-memo');
@@ -595,12 +713,19 @@ function closePopup() { popup.classList.add('hidden'); }
 document.getElementById('popup-close').addEventListener('click', closePopup);
 document.addEventListener('click', e => {
   if (!e.target.closest('#event-popup') && !e.target.closest('.event-chip') && !e.target.closest('.week-event') && !e.target.closest('.cat-event-row')) closePopup();
+  if (!e.target.closest('#cat-modal') && !e.target.closest('#btn-cat-settings') && !e.target.closest('#btn-open-cat-manage')) closeCatModal();
 });
 
 // ===== KEYBOARD SHORTCUTS =====
 document.addEventListener('keydown', e => {
   const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
   const modalOpen = !modal.classList.contains('hidden');
+  const catModalOpen = !catModal.classList.contains('hidden');
+
+  if (catModalOpen) {
+    if (e.key === 'Escape') { closeCatModal(); return; }
+    return;
+  }
 
   if (modalOpen) {
     if (e.key === 'Escape') { closeModal(); return; }
